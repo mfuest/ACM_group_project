@@ -132,6 +132,12 @@ def fetch_posts(reddit, subreddit_name, start_date, end_date, max_posts=1000):
     """
     Fetch posts from a subreddit within a date range.
     
+    Note: Reddit's API has limitations for historical data. This function uses
+    multiple strategies to collect posts:
+    1. Search by timestamp range (for historical data)
+    2. Fetch new posts (for recent data)
+    3. Fetch top posts (for popular content)
+    
     Args:
         reddit: Authenticated praw.Reddit instance
         subreddit_name: Name of the subreddit (without r/)
@@ -144,41 +150,73 @@ def fetch_posts(reddit, subreddit_name, start_date, end_date, max_posts=1000):
     """
     subreddit = reddit.subreddit(subreddit_name)
     posts = []
+    seen_ids = set()  # Track post IDs to avoid duplicates
     
     print(f"  Fetching posts from r/{subreddit_name}...")
     
     try:
-        # Fetch posts from the subreddit
-        # Note: Reddit API doesn't support date filtering directly,
-        # so we fetch recent posts and filter by date
-        for post in subreddit.new(limit=max_posts):
-            post_date = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
-            
-            # Stop if we've gone past the start date
-            if post_date < start_date:
-                break
-            
-            # Include posts within the date range
-            if start_date <= post_date <= end_date:
-                posts.append(post)
-            
-            # Rate limiting: be respectful to Reddit API
-            time.sleep(0.1)
+        # Convert dates to Unix timestamps for Reddit search
+        start_timestamp = int(start_date.timestamp())
+        end_timestamp = int(end_date.timestamp())
         
-        # Also try top posts from the period
-        for post in subreddit.top(time_filter="month", limit=500):
-            post_date = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
-            
-            if start_date <= post_date <= end_date:
-                if post not in posts:  # Avoid duplicates
-                    posts.append(post)
-            
-            time.sleep(0.1)
+        # Strategy 1: Use Reddit search with timestamp range
+        # Format: timestamp:start..end
+        search_query = f"timestamp:{start_timestamp}..{end_timestamp}"
+        try:
+            print(f"  Searching with timestamp range...")
+            for post in subreddit.search(search_query, limit=max_posts, sort="new"):
+                if post.id not in seen_ids:
+                    post_date = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+                    if start_date <= post_date <= end_date:
+                        posts.append(post)
+                        seen_ids.add(post.id)
+                time.sleep(0.1)
+        except Exception as e:
+            print(f"  Note: Search API limitation: {e}")
         
-        print(f"  Found {len(posts)} posts in date range")
+        # Strategy 2: Fetch new posts (works for recent data)
+        # Only use if the end date is recent (within last 30 days)
+        now = datetime.now(timezone.utc)
+        days_ago = (now - end_date).days
+        if days_ago <= 30:
+            try:
+                print(f"  Fetching recent posts...")
+                for post in subreddit.new(limit=min(max_posts, 1000)):
+                    if post.id not in seen_ids:
+                        post_date = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+                        # Stop if we've gone past the start date
+                        if post_date < start_date:
+                            break
+                        # Include posts within the date range
+                        if start_date <= post_date <= end_date:
+                            posts.append(post)
+                            seen_ids.add(post.id)
+                    time.sleep(0.1)
+            except Exception as e:
+                print(f"  Note: Error fetching new posts: {e}")
+        
+        # Strategy 3: Fetch top posts from different time periods
+        # Try different time filters if the date range spans multiple periods
+        time_filters = ["all", "year", "month", "week", "day"]
+        for time_filter in time_filters:
+            try:
+                print(f"  Fetching top posts ({time_filter})...")
+                for post in subreddit.top(time_filter=time_filter, limit=500):
+                    if post.id not in seen_ids:
+                        post_date = datetime.fromtimestamp(post.created_utc, tz=timezone.utc)
+                        if start_date <= post_date <= end_date:
+                            posts.append(post)
+                            seen_ids.add(post.id)
+                    time.sleep(0.1)
+            except Exception as e:
+                print(f"  Note: Error fetching top posts ({time_filter}): {e}")
+        
+        print(f"  Found {len(posts)} unique posts in date range")
         
     except Exception as e:
         print(f"  Error fetching posts: {e}")
+        import traceback
+        traceback.print_exc()
     
     return posts
 
