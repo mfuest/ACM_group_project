@@ -1,137 +1,111 @@
-# Political Polarization Research Pipeline
+# ACM Group Project - Reddit Data Analysis
 
-A research pipeline for measuring changes in political polarization in Reddit data before, during, and after EURO 2024, comparing Germany (host country) with the Netherlands and France (control countries).
+This project analyzes Reddit data from the r/PolitikBRD subreddit, with a focus on activity patterns around the 2024 European Championship (EURO 2024).
 
 ## Project Structure
 
 ```
 ACM_group_project/
 ├── data/
-│   ├── raw/              # Raw scraped Reddit posts
-│   └── clean/            # Filtered and cleaned datasets
-├── scripts/
-│   └── reddit_scraper.py # Reddit data collection script
+│   ├── raw/              # Raw data files
+│   │   ├── r_PolitikBRD_posts.jsonl      # Original JSONL export of Reddit posts
+│   │   ├── r_PolitikBRD_comments.jsonl   # Original JSONL export of Reddit comments
+│   │   ├── posts.parquet                 # Processed posts in Parquet format
+│   │   └── comments.parquet              # Processed comments in Parquet format
+│   └── clean/            # Cleaned/processed data (for future use)
+├── scrape/               # Data processing scripts
+│   ├── ingest_posts_jsonl.py    # Converts posts JSONL → Parquet
+│   ├── ingest_comments_jsonl.py # Converts comments JSONL → Parquet
+│   └── sanity_checks.py         # Data quality validation
 ├── notebooks/
-│   └── preprocessing.ipynb # Data cleaning and preprocessing notebook
-├── config/               # Configuration files (optional)
-├── .env                  # Environment variables (create from .env.example)
-├── .env.example          # Example environment variables template
+│   └── exploration.ipynb        # Jupyter notebook for exploratory analysis
 ├── requirements.txt      # Python dependencies
 └── README.md            # This file
 ```
 
 ## Setup
 
-### 1. Install Dependencies
+1. Create and activate a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
+2. Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
 
-### 2. Reddit API Setup
-
-1. Go to https://www.reddit.com/prefs/apps
-2. Click "create another app" or "create app"
-3. Fill in:
-   - **Name**: PoliticalPolarizationResearch (or any name)
-   - **Type**: script
-   - **Description**: Research project
-   - **Redirect URI**: http://localhost:8080 (or any valid URL)
-4. Note your **Client ID** (under the app name) and **Client Secret**
-5. Create a `.env` file in the project root:
-
-```bash
-cp .env.example .env
-```
-
-6. Edit `.env` and add your credentials:
-
-```
-REDDIT_CLIENT_ID=your_client_id_here
-REDDIT_CLIENT_SECRET=your_client_secret_here
-REDDIT_USER_AGENT=PoliticalPolarizationResearch/1.0
-```
-
 ## Usage
 
-### Step 1: Scrape Reddit Data
+### Data Ingestion
 
-Run the scraper to collect posts from r/de, r/thenetherlands, and r/france:
+Convert JSONL files to Parquet format for efficient processing:
 
+**Process posts:**
 ```bash
-python scripts/reddit_scraper.py
+python scrape/ingest_posts_jsonl.py --in data/raw/r_PolitikBRD_posts.jsonl --out data/raw/posts.parquet
 ```
 
-This will:
-- Fetch posts from three time windows:
-  - **Pre-EURO**: 2024-05-15 to 2024-06-13
-  - **During EURO**: 2024-06-14 to 2024-07-14
-  - **Post-EURO**: 2024-07-15 to 2024-08-15
-- Save raw posts to `data/raw/{country}_{phase}.csv`
-- Filter political posts and save to `data/clean/{country}_{phase}_politics.csv`
-
-### Step 2: Preprocess Data
-
-Open and run the Jupyter notebook:
-
+**Process comments:**
 ```bash
-jupyter notebook notebooks/preprocessing.ipynb
+python scrape/ingest_comments_jsonl.py --in data/raw/r_PolitikBRD_comments.jsonl --out data/raw/comments.parquet
 ```
 
-The notebook will:
-1. Load all scraped CSV files
-2. Merge into a single DataFrame
-3. Clean text (lowercase, remove URLs)
-4. Create `full_text` column (title + selftext)
-5. Mark political posts
-6. Export final cleaned dataset to `data/clean/all_countries_clean.csv`
+### Data Validation
 
-## Data Collection Details
+Run sanity checks on the processed data:
+```bash
+python scrape/sanity_checks.py --posts data/raw/posts.parquet --comments data/raw/comments.parquet
+```
 
-### Subreddits
-- **Germany**: r/de
-- **Netherlands**: r/thenetherlands
-- **France**: r/france
+This will display:
+- Row counts for posts and comments
+- Time ranges of the data
+- Deleted/removed comment ratios
+- Join coverage between posts and comments
+- Daily counts
 
-### Political Keywords
+### Analysis
 
-**German**: afd, cdu, spd, csu, gruene, grüne, linke, merz, scholz, habeck, migration, flüchtlinge, asyl, klima, heizungsgesetz, bundestag, ampel
+Open the Jupyter notebook for exploratory analysis:
+```bash
+jupyter notebook notebooks/exploration.ipynb
+```
 
-**Dutch**: vvd, d66, pvv, wilders, rutte, klimaat, immigratie, verkiezingen, kabinet
+The notebook includes:
+- Loading posts and comments from Parquet files
+- Date/time processing
+- Period categorization (pre-EURO, during EURO, post-EURO)
+- EURO 2024 period: June 14 - July 14, 2024
 
-**French**: macron, rn, mélenchon, melenchon, immigration, climat, gouvernement, élection, election, assemblée, assemblee
+## Data Processing Pipeline
 
-### Time Windows
+1. **Raw Data**: JSONL files exported from Reddit (r/PolitikBRD)
+2. **Ingestion**: Scripts convert JSONL → Parquet with normalization and deduplication
+3. **Validation**: Sanity checks validate data quality
+4. **Analysis**: Jupyter notebook for exploratory data analysis
 
-- **Pre-EURO**: May 15 - June 13, 2024
-- **During EURO**: June 14 - July 14, 2024
-- **Post-EURO**: July 15 - August 15, 2024
+## Key Features
 
-## Output Files
-
-### Raw Data (`data/raw/`)
-- `{country}_{phase}.csv` - All posts for each country/phase combination
-
-### Clean Data (`data/clean/`)
-- `{country}_{phase}_politics.csv` - Filtered political posts
-- `all_countries_clean.csv` - Final unified dataset with all preprocessing
-
-## Notes
-
-- The Reddit API has rate limits. The script includes delays to be respectful.
-- Reddit's API doesn't support direct date filtering, so the script fetches recent posts and filters by date.
-- Some posts may be missed if they're not in the "new" or "top" feeds.
-- Make sure to respect Reddit's API terms of service and rate limits.
+- **Streaming Processing**: Handles large JSONL files efficiently with chunked processing
+- **Data Normalization**: Standardizes field names across different export formats
+- **Deduplication**: Removes duplicate entries based on IDs
+- **Time-based Analysis**: Categorizes data into periods relative to EURO 2024
 
 ## Dependencies
 
-- `praw` - Python Reddit API Wrapper
-- `pandas` - Data manipulation
-- `python-dotenv` - Environment variable management
-- `jupyter` - For running notebooks
-- `matplotlib` - For visualizations (optional, in notebook)
+- `praw>=7.7.0` - Reddit API wrapper
+- `pandas>=1.5.0` - Data manipulation
+- `python-dotenv>=0.21.0` - Environment variable management
+- `jupyter>=1.0.0` - Interactive notebooks
+- `matplotlib>=3.6.0` - Plotting
+- `numpy>=1.23.0` - Numerical computing
+- `pyarrow` - Parquet file support (installed as dependency)
 
-## License
+## Notes
 
-This project is for academic research purposes.
+- The project focuses on analyzing r/PolitikBRD activity patterns around EURO 2024
+- Data is categorized into three periods: pre-EURO, during EURO, and post-EURO
+- Parquet format is used for efficient storage and fast loading of large datasets
 
