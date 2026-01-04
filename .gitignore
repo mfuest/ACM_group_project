@@ -1,4 +1,8 @@
-# Large comment files - too big for GitHub
+# Large files - too big for GitHub (>100MB)
 data/raw/r_de_comments_feb_oct.jsonl
 data/raw/r_de_comments_feb_oct.parquet
 data/processed/comments_r_de_feb_oct.csv
+data/processed/r_DE_comments.csv
+data/raw/r_DE_comments.jsonl
+data/raw/r_DE_comments.parquet
+data/raw/r_de_posts_feb_oct.jsonl
